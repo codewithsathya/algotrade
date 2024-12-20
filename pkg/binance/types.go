@@ -1,7 +1,5 @@
 package binance
 
-import "sync"
-
 type DepthUpdate struct {
     Stream string `json:"stream"`
     Data   struct {
@@ -32,10 +30,4 @@ type GetProductsSymbol struct {
 	Volume                string   `json:"v"`
 	Tags                  []string `json:"tags"`
 	IsETF                 bool     `json:"etf"`
-}
-
-type OrderBook struct {
-    Bids map[string][][2]string
-    Asks map[string][][2]string
-    mu   sync.RWMutex
 }

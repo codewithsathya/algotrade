@@ -1,6 +1,7 @@
 package wss
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -51,20 +52,30 @@ func (w *WebSocket) Connect() error {
 	return nil
 }
 
-func (w *WebSocket) ReadMessage() (string, error) {
+func (w *WebSocket) ReadMessage(ctx context.Context) (string, error) {
 	for {
-		messageType, message, err := w.conn.ReadMessage()
-		if err != nil {
-			return "", fmt.Errorf("error reading WebSocket message: %w", err)
-		}
-		if messageType == websocket.PingMessage {
-			if err := w.SendPong(message); err != nil {
-				return "", fmt.Errorf("error responding to PING frame: %w", err)
+		select {
+		case <-ctx.Done():
+			return "", fmt.Errorf("reading WebSocket message canceled: %w", ctx.Err())
+		default:
+			messageType, message, err := w.conn.ReadMessage()
+			if err != nil {
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+					return "", fmt.Errorf("WebSocket closed: %w", err)
+				}
+				return "", fmt.Errorf("error reading WebSocket message: %w", err)
 			}
-			continue
-		}
-		if messageType == websocket.TextMessage || messageType == websocket.BinaryMessage {
-			return string(message), nil
+
+			if messageType == websocket.PingMessage {
+				if err := w.SendPong(message); err != nil {
+					return "", fmt.Errorf("error responding to PING frame: %w", err)
+				}
+				continue
+			}
+
+			if messageType == websocket.TextMessage || messageType == websocket.BinaryMessage {
+				return string(message), nil
+			}
 		}
 	}
 }

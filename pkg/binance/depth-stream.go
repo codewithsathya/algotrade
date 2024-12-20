@@ -45,6 +45,7 @@ func (d *DepthStream) Start(ctx context.Context) error {
 
 	if err := d.startReading(ctx); err != nil {
 		fmt.Printf("error in depth stream reading: %v\n", err)
+		return err
 	}
 
 	return nil
@@ -56,7 +57,7 @@ func (d *DepthStream) startReading(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			message, err := d.ws.ReadMessage()
+			message, err := d.ws.ReadMessage(ctx)
 			if err != nil {
 				return fmt.Errorf("error reading WebSocket message: %w", err)
 			}
