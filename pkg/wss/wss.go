@@ -52,8 +52,21 @@ func (w *WebSocket) Connect() error {
 }
 
 func (w *WebSocket) ReadMessage() (string, error) {
-	_, message, err := w.conn.ReadMessage()
-	return string(message), err
+	for {
+		messageType, message, err := w.conn.ReadMessage()
+		if err != nil {
+			return "", fmt.Errorf("error reading WebSocket message: %w", err)
+		}
+		if messageType == websocket.PingMessage {
+			if err := w.SendPong(message); err != nil {
+				return "", fmt.Errorf("error responding to PING frame: %w", err)
+			}
+			continue
+		}
+		if messageType == websocket.TextMessage || messageType == websocket.BinaryMessage {
+			return string(message), nil
+		}
+	}
 }
 
 func (w *WebSocket) SendMessage(message string) error {
@@ -67,4 +80,8 @@ func (w *WebSocket) Close() {
 
 func (w *WebSocket) SendPing(ping string) error {
 	return w.conn.WriteMessage(websocket.TextMessage, []byte(ping))
+}
+
+func (w *WebSocket) SendPong(payload []byte) error {
+	return w.conn.WriteControl(websocket.PongMessage, payload, time.Now().Add(time.Second))
 }

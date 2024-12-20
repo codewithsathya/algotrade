@@ -11,6 +11,7 @@ import (
 type DepthStream struct {
 	subscribedSymbols []string
 	ws                *wss.WebSocket
+	updates           chan DepthUpdate
 }
 
 func NewDepthStream(subscribedSymbols []string) (*DepthStream, error) {
@@ -23,6 +24,7 @@ func NewDepthStream(subscribedSymbols []string) (*DepthStream, error) {
 		ws: &wss.WebSocket{
 			Url: "wss://stream.binance.com/stream",
 		},
+		updates: make(chan DepthUpdate),
 	}, nil
 }
 
@@ -30,7 +32,6 @@ func (d *DepthStream) Start(ctx context.Context) error {
 	if err := d.ws.Connect(); err != nil {
 		return fmt.Errorf("failed to connect to Binance stream: %w", err)
 	}
-
 	defer d.ws.Close()
 
 	payload, err := d.constructPayload()
@@ -42,7 +43,11 @@ func (d *DepthStream) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to send subscription payload: %w", err)
 	}
 
-	return d.startReading(ctx)
+	if err := d.startReading(ctx); err != nil {
+		fmt.Printf("error in depth stream reading: %v\n", err)
+	}
+
+	return nil
 }
 
 func (d *DepthStream) startReading(ctx context.Context) error {
@@ -60,12 +65,11 @@ func (d *DepthStream) startReading(ctx context.Context) error {
 				fmt.Printf("failed to unmarshal depth update: %v\n", err)
 				continue
 			}
-			fmt.Println(depthUpdate.Data.Symbol)
-			if(len(depthUpdate.Data.Asks) > 0) {
-				fmt.Println(`Buy Price`, depthUpdate.Data.Asks[0])
-			}
-			if(len(depthUpdate.Data.Bids) > 0) {
-				fmt.Println(`Sell Price`, depthUpdate.Data.Bids[0])
+
+			select {
+			case d.updates <- depthUpdate:
+			case <-ctx.Done():
+				return ctx.Err()
 			}
 		}
 	}
@@ -75,12 +79,13 @@ func (d *DepthStream) Stop() {
 	if d.ws != nil {
 		d.ws.Close()
 	}
+	close(d.updates)
 }
 
 func (d *DepthStream) constructPayload() (string, error) {
 	params := make([]string, len(d.subscribedSymbols))
 	for i, symbol := range d.subscribedSymbols {
-		params[i] = strings.ToLower(symbol) + "@depth"
+		params[i] = strings.ToLower(symbol) + "@depth5"
 	}
 
 	payload := map[string]interface{}{
@@ -95,4 +100,8 @@ func (d *DepthStream) constructPayload() (string, error) {
 	}
 
 	return string(payloadJSON), nil
+}
+
+func (d *DepthStream) Updates() <-chan DepthUpdate {
+	return d.updates
 }
