@@ -14,18 +14,14 @@ type DepthStream struct {
 	updates           chan DepthUpdate
 }
 
-func NewDepthStream(subscribedSymbols []string) (*DepthStream, error) {
-	if len(subscribedSymbols) == 0 {
-		return nil, fmt.Errorf("no symbols provided for subscription")
-	}
-
+func NewDepthStream(subscribedSymbols []string) (*DepthStream) {
 	return &DepthStream{
 		subscribedSymbols: subscribedSymbols,
 		ws: &wss.WebSocket{
 			Url: "wss://stream.binance.com/stream",
 		},
 		updates: make(chan DepthUpdate),
-	}, nil
+	}
 }
 
 func (d *DepthStream) Start(ctx context.Context) error {
@@ -51,29 +47,8 @@ func (d *DepthStream) Start(ctx context.Context) error {
 	return nil
 }
 
-func (d *DepthStream) startReading(ctx context.Context) error {
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-			message, err := d.ws.ReadMessage(ctx)
-			if err != nil {
-				return fmt.Errorf("error reading WebSocket message: %w", err)
-			}
-			var depthUpdate DepthUpdate
-			if err := json.Unmarshal([]byte(message), &depthUpdate); err != nil {
-				fmt.Printf("failed to unmarshal depth update: %v\n", err)
-				continue
-			}
-
-			select {
-			case d.updates <- depthUpdate:
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-	}
+func (d *DepthStream) GetUpdatesChannel() <-chan DepthUpdate {
+	return d.updates
 }
 
 func (d *DepthStream) Stop() {
@@ -103,6 +78,27 @@ func (d *DepthStream) constructPayload() (string, error) {
 	return string(payloadJSON), nil
 }
 
-func (d *DepthStream) Updates() <-chan DepthUpdate {
-	return d.updates
+func (d *DepthStream) startReading(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			message, err := d.ws.ReadMessage(ctx)
+			if err != nil {
+				return fmt.Errorf("error reading WebSocket message: %w", err)
+			}
+			var depthUpdate DepthUpdate
+			if err := json.Unmarshal([]byte(message), &depthUpdate); err != nil {
+				fmt.Printf("failed to unmarshal depth update: %v\n", err)
+				continue
+			}
+
+			select {
+			case d.updates <- depthUpdate:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
 }
