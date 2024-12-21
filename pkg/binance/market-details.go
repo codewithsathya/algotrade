@@ -19,7 +19,7 @@ type MarketDetails struct {
 	streamsCancelFunc context.CancelFunc
 	client            *BinanceClient
 	errCh             chan error
-	updateChannel     chan DepthUpdate
+	UpdateChannel     chan DepthUpdate
 	batches           [][]string
 	batchSize         int
 }
@@ -35,7 +35,7 @@ func NewMarketDetails(ctx context.Context) *MarketDetails {
 		cancelFunc:        nil,
 		client:            NewBinanceClient(),
 		errCh:             make(chan error),
-		updateChannel:     make(chan DepthUpdate),
+		UpdateChannel:     make(chan DepthUpdate, 10000),
 		batchSize:         50,
 	}
 }
@@ -63,7 +63,7 @@ func (md *MarketDetails) InitDepthStreams() {
 		go func(stream *DepthStream) {
 			for update := range stream.GetUpdatesChannel() {
 				select {
-				case md.updateChannel <- update:
+				case md.UpdateChannel <- update:
 				case <-md.ctx.Done():
 					return
 				}
@@ -90,8 +90,8 @@ func (md *MarketDetails) StartUpdateHandler() {
 	go func(ob *OrderBook) {
 		for {
 			select {
-			case update := <-md.updateChannel:
-				ob.Update(update.Stream, update)
+			case update := <-md.UpdateChannel:
+				ob.Update(utils.GetSymbol(update.Stream), update)
 			case <-md.ctx.Done():
 				return
 			}
@@ -124,10 +124,14 @@ func (md *MarketDetails) StopStreams() {
     }
 }
 
-func (md *MarketDetails) GetAsks() map[string][][2]string {
-    return md.orderBook.GetAsks()
+func (md *MarketDetails) GetOrderBook() *OrderBook {
+	return md.orderBook;
 }
 
-func (md *MarketDetails) GetBids() map[string][][2]string {
-    return md.orderBook.GetBids()
+func (md *MarketDetails) GetProducts() []GetProductsSymbol {
+	return md.products
+}
+
+func (md *MarketDetails) GetAsksAndBids() (map[string][][2]string, map[string][][2]string) {
+    return md.orderBook.GetAsksAndBids()
 }
